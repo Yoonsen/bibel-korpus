@@ -28,7 +28,7 @@ export type CollocationRow = {
   word: string;
   count: number;
   distance: number | null;
-  bayesianDistance: number | null;
+  avgDistance: number | null;
 };
 
 type ColumnarPayload = Record<string, unknown>;
@@ -68,7 +68,11 @@ export async function fetchCollocations(
 
   const payload = await postJSON<unknown>(baseUrl, '/urncolldist_urn', body);
   const collocation = normalizeCollocation(payload);
-  return collocation.sort((a, b) => b.count - a.count);
+  return collocation.sort((a, b) => {
+    const aScore = a.avgDistance ?? Number.POSITIVE_INFINITY;
+    const bScore = b.avgDistance ?? Number.POSITIVE_INFINITY;
+    return aScore - bScore || b.count - a.count;
+  });
 }
 
 async function postJSON<T>(
@@ -126,8 +130,18 @@ function normalizeCollocation(data: unknown): CollocationRow[] {
     word,
     count: Number(data.counts?.[word] ?? 0),
     distance: toNumberOrNull(data.dist?.[word]),
-    bayesianDistance: toNumberOrNull(data.bdist?.[word]),
+    avgDistance: computeAverageDistance(
+      toNumberOrNull(data.dist?.[word]),
+      Number(data.counts?.[word] ?? 0),
+    ),
   }));
+}
+
+function computeAverageDistance(distance: number | null, count: number): number | null {
+  if (distance == null || !Number.isFinite(distance) || !count) {
+    return null;
+  }
+  return distance / count;
 }
 
 function columnsToRows(payload: ColumnarPayload): ConcordanceRow[] {

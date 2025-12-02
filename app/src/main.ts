@@ -24,8 +24,14 @@ app.innerHTML = `
     </div>
   </header>
 
-  <main class="grid">
-    <section class="panel">
+  <main class="workspace">
+    <div class="tabs" role="tablist">
+      <button class="tab-button" type="button" data-tab-target="corpus">Korpus</button>
+      <button class="tab-button" type="button" data-tab-target="concordance">Concordance</button>
+      <button class="tab-button" type="button" data-tab-target="collocations">Kollokasjoner</button>
+    </div>
+
+    <section class="panel tab-panel" data-tab="corpus" role="tabpanel">
       <header>
         <div>
           <p class="eyebrow">Subkorpus</p>
@@ -43,10 +49,10 @@ app.innerHTML = `
           <input id="urn-search" type="search" placeholder="Filtrer på navn/år" />
         </label>
       </div>
-      <select id="urn-select" multiple size="10"></select>
+      <select id="urn-select" multiple size="12"></select>
     </section>
 
-    <section class="panel">
+    <section class="panel tab-panel" data-tab="concordance" role="tabpanel">
       <header>
         <div>
           <p class="eyebrow">Concordance</p>
@@ -56,7 +62,7 @@ app.innerHTML = `
       <form id="conc-form" class="stack" autocomplete="off">
         <label>
           <span>Søkestreng (SQLite FTS5)</span>
-          <input name="query" type="text" placeholder="f.eks. \"Gud NEAR/5 kjærlighet\"" required />
+          <input name="query" type="text" placeholder="f.eks. «Gud NEAR/5 kjærlighet»" required />
         </label>
         <div class="form-grid">
           <label>
@@ -73,10 +79,10 @@ app.innerHTML = `
       <div class="result-actions">
         <button type="button" id="download-conc" disabled>Last ned CSV</button>
       </div>
-      <div id="conc-results" class="results"></div>
+      <div id="conc-results" class="results tall"></div>
     </section>
 
-    <section class="panel">
+    <section class="panel tab-panel" data-tab="collocations" role="tabpanel">
       <header>
         <div>
           <p class="eyebrow">Kollokasjoner</p>
@@ -121,6 +127,10 @@ const concForm = app.querySelector<HTMLFormElement>('#conc-form');
 const collForm = app.querySelector<HTMLFormElement>('#coll-form');
 const downloadConcButton = app.querySelector<HTMLButtonElement>('#download-conc');
 const downloadCollButton = app.querySelector<HTMLButtonElement>('#download-coll');
+const tabButtons = Array.from(
+  app.querySelectorAll<HTMLButtonElement>('[data-tab-target]'),
+);
+const tabPanels = Array.from(app.querySelectorAll<HTMLElement>('[data-tab]'));
 
 if (
   !urnSelect ||
@@ -131,7 +141,9 @@ if (
   !collForm ||
   !urnSearch ||
   !downloadConcButton ||
-  !downloadCollButton
+  !downloadCollButton ||
+  tabButtons.length === 0 ||
+  tabPanels.length === 0
 ) {
   throw new Error('UI-elementer mangler i DOM-en');
 }
@@ -145,10 +157,13 @@ const collFormEl = collForm;
 const urnSearchField = urnSearch;
 const downloadConcBtn = downloadConcButton;
 const downloadCollBtn = downloadCollButton;
+const tabs = tabButtons;
+const panels = tabPanels;
 
 populateUrnSelect();
 selectAllUrns();
 updateSelectedCount();
+activateTab('concordance');
 
 let concTableColumns: string[] = [];
 let concRows: Array<Record<string, unknown>> = [];
@@ -177,6 +192,15 @@ urnSearchField.addEventListener('input', () => {
     const label = option.textContent?.toLowerCase() ?? '';
     option.hidden = term.length > 0 && !label.includes(term);
   }
+});
+
+tabs.forEach((button) => {
+  button.addEventListener('click', () => {
+    const target = button.dataset.tabTarget;
+    if (target) {
+      activateTab(target);
+    }
+  });
 });
 
 concFormEl.addEventListener('submit', async (event) => {
@@ -212,8 +236,20 @@ concFormEl.addEventListener('submit', async (event) => {
       return;
     }
 
-    const columns = renderTable(concResultsBox, rows, ['docid', 'urn', 'conc'], new Set(['conc']));
-    updateConcDataset(rows, columns);
+    const enrichedRows = rows.map((row) => ({
+      ...row,
+      kilde: row.urn
+        ? `<a href="https://www.nb.no/items/${encodeURIComponent(String(row.urn))}" target="_blank" rel="noopener noreferrer">Til NB</a>`
+        : '',
+    }));
+
+    const columns = renderTable(
+      concResultsBox,
+      enrichedRows,
+      ['docid', 'kilde', 'conc'],
+      new Set(['kilde', 'conc']),
+    );
+    updateConcDataset(enrichedRows, columns);
   } catch (error) {
     renderMessage(concResultsBox, (error as Error).message, 'error');
     updateConcDataset([], []);
@@ -255,11 +291,7 @@ collFormEl.addEventListener('submit', async (event) => {
       return;
     }
 
-    const columns = renderTable(
-      collResultsBox,
-      rows,
-      ['word', 'count', 'distance', 'bayesianDistance'],
-    );
+    const columns = renderTable(collResultsBox, rows, ['word', 'count', 'avgDistance']);
     updateCollDataset(rows, columns);
   } catch (error) {
     renderMessage(collResultsBox, (error as Error).message, 'error');
@@ -352,6 +384,10 @@ function renderTable(
         td.textContent = '';
       } else if (htmlColumns.has(column) && typeof value === 'string') {
         td.innerHTML = value;
+      } else if (typeof value === 'number') {
+        td.textContent = Number.isFinite(value)
+          ? value.toLocaleString('nb-NO', { maximumFractionDigits: 3 })
+          : '';
       } else {
         td.textContent = String(value);
       }
@@ -420,4 +456,14 @@ function formatCsvCell(value: unknown): string {
   const needsQuoting = /[",\n]/.test(raw);
   const escaped = raw.replace(/"/g, '""');
   return needsQuoting ? `"${escaped}"` : escaped;
+}
+
+function activateTab(target: string) {
+  tabs.forEach((button) => {
+    button.classList.toggle('is-active', button.dataset.tabTarget === target);
+  });
+
+  panels.forEach((panel) => {
+    panel.classList.toggle('is-active', panel.dataset.tab === target);
+  });
 }
