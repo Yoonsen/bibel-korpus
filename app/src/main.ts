@@ -686,7 +686,14 @@ function renderFrequencyTable() {
     const row: Record<string, unknown> = {};
     freqWords.forEach((word) => {
       const value = entry.values[word];
-      row[word] = value ? (freqDisplayMode === 'relfreq' ? value.relfreq : value.freq) : 0;
+      if (!value) {
+        row[word] = 0;
+        return;
+      }
+      row[word] =
+        freqDisplayMode === 'relfreq'
+          ? value.relfreq * 100
+          : value.freq;
     });
     row.år = entry.år ?? '';
     row.målform = entry.målform ?? '';
@@ -705,18 +712,19 @@ function renderFrequencyTable() {
     new Set(['nb']),
   );
   updateFreqDataset(sortedRows, renderedColumns);
-  attachFrequencySortHandlers(columns);
+  attachFrequencySortHandlers();
 }
 
 function sortFrequencyRows(rows: Array<Record<string, unknown>>) {
   if (!freqSortColumn) {
     return rows;
   }
+  const columnKey = freqSortColumn as string;
   const dir = freqSortDirection === 'asc' ? 1 : -1;
-  const isNumeric = freqWords.includes(freqSortColumn);
+  const isNumeric = freqWords.includes(columnKey);
   return [...rows].sort((a, b) => {
-    const aVal = a[freqSortColumn];
-    const bVal = b[freqSortColumn];
+    const aVal = a[columnKey];
+    const bVal = b[columnKey];
     let result: number;
     if (isNumeric) {
       result = (Number(aVal) || 0) - (Number(bVal) || 0);
@@ -727,7 +735,7 @@ function sortFrequencyRows(rows: Array<Record<string, unknown>>) {
   });
 }
 
-function attachFrequencySortHandlers(columns: string[]) {
+function attachFrequencySortHandlers() {
   const table = freqResultsBox.querySelector('table');
   if (!table) {
     return;
