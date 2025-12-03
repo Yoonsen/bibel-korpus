@@ -48,3 +48,4 @@ Alle kall skjer fra nettleseren, så det kreves ingen server-side komponenter.
 - Implementere flere DH-lab-tjenester (f.eks. dokument-term-matriser, tellinger)
 - Automatisere bygg til `docs/` med GitHub Actions
 
+

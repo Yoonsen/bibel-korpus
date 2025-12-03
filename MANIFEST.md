@@ -48,3 +48,4 @@ Bygge en JavaScript-basert PWA som gjør det mulig å hente concordancer og koll
 - 2025-12-02: Legge til UI for søk, tabeller og CSV-eksport, bygge pipeline til docs/
 - 2025-12-02: Dokumentasjon (manifest, arkitektur, logg, README)
 
+

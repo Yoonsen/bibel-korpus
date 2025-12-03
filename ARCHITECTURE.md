@@ -64,3 +64,4 @@ UI-valg ──> fetchConcordance/fetchCollocations ──> tabeller & CSV
 - Service worker + manifest (PWA) og offline caching
 *** End Patch
 
+

@@ -16,9 +16,9 @@ app.innerHTML = `
   <header class="hero">
     <div class="hero-copy">
       <p class="eyebrow">Bibel-korpus</p>
-      <h1>Concordance & kollokasjoner</h1>
+      <h1>Konkordanser & kollokasjoner</h1>
       <p>
-        Velg hvilke utgaver som skal inngå i subkorpuset, og hent concordancer
+        Velg hvilke utgaver som skal inngå i subkorpuset, og hent konkordanser
         eller kollokasjoner direkte fra NB sitt DH-lab API.
       </p>
     </div>
@@ -27,7 +27,7 @@ app.innerHTML = `
   <main class="workspace">
     <div class="tabs" role="tablist">
       <button class="tab-button" type="button" data-tab-target="corpus">Korpus</button>
-      <button class="tab-button" type="button" data-tab-target="concordance">Concordance</button>
+      <button class="tab-button" type="button" data-tab-target="concordance">Konkordanser</button>
       <button class="tab-button" type="button" data-tab-target="collocations">Kollokasjoner</button>
     </div>
 
@@ -45,17 +45,17 @@ app.innerHTML = `
           <button type="button" data-action="clear-all">Fjern alle</button>
         </div>
         <label class="search-label" for="urn-search">
-          <span>Søk etter tittel</span>
-          <input id="urn-search" type="search" placeholder="Filtrer på navn/år" />
+          <span>Søk etter metadata</span>
+          <input id="urn-search" type="search" placeholder="Filtrer på tittel/forfatter/år/målform" />
         </label>
       </div>
-      <select id="urn-select" multiple size="12"></select>
+      <div id="urn-list" class="urn-list" role="list"></div>
     </section>
 
     <section class="panel tab-panel" data-tab="concordance" role="tabpanel">
       <header>
         <div>
-          <p class="eyebrow">Concordance</p>
+          <p class="eyebrow">Konkordanser</p>
           <h2>Søk etter uttrykk</h2>
         </div>
       </header>
@@ -74,7 +74,7 @@ app.innerHTML = `
             <input name="limit" type="number" min="1" max="1000" value="100" />
           </label>
         </div>
-        <button type="submit">Hent concordance</button>
+        <button type="submit">Hent konkordanser</button>
       </form>
       <div class="result-actions">
         <button type="button" id="download-conc" disabled>Last ned CSV</button>
@@ -118,7 +118,7 @@ app.innerHTML = `
   </main>
 `;
 
-const urnSelect = app.querySelector<HTMLSelectElement>('#urn-select');
+const urnList = app.querySelector<HTMLDivElement>('#urn-list');
 const urnCount = app.querySelector<HTMLOutputElement>('#urn-count');
 const urnSearch = app.querySelector<HTMLInputElement>('#urn-search');
 const concResults = app.querySelector<HTMLDivElement>('#conc-results');
@@ -133,7 +133,7 @@ const tabButtons = Array.from(
 const tabPanels = Array.from(app.querySelectorAll<HTMLElement>('[data-tab]'));
 
 if (
-  !urnSelect ||
+  !urnList ||
   !urnCount ||
   !concResults ||
   !collResults ||
@@ -148,7 +148,6 @@ if (
   throw new Error('UI-elementer mangler i DOM-en');
 }
 
-const urnSelectField = urnSelect;
 const urnCountField = urnCount;
 const concResultsBox = concResults;
 const collResultsBox = collResults;
@@ -157,11 +156,12 @@ const collFormEl = collForm;
 const urnSearchField = urnSearch;
 const downloadConcBtn = downloadConcButton;
 const downloadCollBtn = downloadCollButton;
+const urnListContainer = urnList;
+const selectedUrns = new Set<string>(CORPUS.map((entry) => entry.urn));
 const tabs = tabButtons;
 const panels = tabPanels;
 
-populateUrnSelect();
-selectAllUrns();
+renderUrnList();
 updateSelectedCount();
 activateTab('concordance');
 
@@ -174,24 +174,16 @@ app
   .querySelector<HTMLButtonElement>('[data-action="select-all"]')
   ?.addEventListener('click', () => {
     selectAllUrns();
-    updateSelectedCount();
   });
 
 app
   .querySelector<HTMLButtonElement>('[data-action="clear-all"]')
   ?.addEventListener('click', () => {
-    urnSelectField.selectedIndex = -1;
-    updateSelectedCount();
+    clearAllUrns();
   });
 
-urnSelectField.addEventListener('change', updateSelectedCount);
-
 urnSearchField.addEventListener('input', () => {
-  const term = urnSearchField.value.toLowerCase().trim();
-  for (const option of Array.from(urnSelectField.options)) {
-    const label = option.textContent?.toLowerCase() ?? '';
-    option.hidden = term.length > 0 && !label.includes(term);
-  }
+  renderUrnList(urnSearchField.value);
 });
 
 tabs.forEach((button) => {
@@ -219,7 +211,7 @@ concFormEl.addEventListener('submit', async (event) => {
     return;
   }
 
-  renderMessage(concResultsBox, 'Henter concordance …', 'info');
+  renderMessage(concResultsBox, 'Henter konkordanser …', 'info');
   updateConcDataset([], []);
 
   try {
@@ -300,46 +292,118 @@ collFormEl.addEventListener('submit', async (event) => {
 });
 
 downloadConcBtn.addEventListener('click', () => {
-  exportCsv(concRows, concTableColumns, 'concordance.csv');
+  exportCsv(concRows, concTableColumns, 'konkordanser.csv');
 });
 
 downloadCollBtn.addEventListener('click', () => {
-  exportCsv(collRows, collTableColumns, 'collocations.csv');
+  exportCsv(collRows, collTableColumns, 'kollokasjoner.csv');
 });
 
-function populateUrnSelect() {
+function renderUrnList(filterValue = '') {
+  if (!urnListContainer) {
+    return;
+  }
+
+  const term = filterValue.toLowerCase().trim();
   const fragment = document.createDocumentFragment();
+
   CORPUS.forEach((entry) => {
-    const option = document.createElement('option');
-    option.value = entry.urn;
-    option.textContent = formatCorpusLabel(entry.title, entry.year);
-    fragment.appendChild(option);
+    const searchable = [
+      entry.title,
+      entry.authors,
+      entry.publisher,
+      entry.langs,
+      entry.year ? String(entry.year) : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    if (term && !searchable.includes(term)) {
+      return;
+    }
+
+    const label = document.createElement('label');
+    label.className = 'urn-card';
+    label.setAttribute('role', 'listitem');
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = entry.urn;
+    checkbox.checked = selectedUrns.has(entry.urn);
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) {
+        selectedUrns.add(entry.urn);
+      } else {
+        selectedUrns.delete(entry.urn);
+      }
+      updateSelectedCount();
+    });
+
+    const details = document.createElement('div');
+    details.className = 'urn-info';
+
+    const title = document.createElement('p');
+    title.className = 'urn-title';
+    title.textContent = entry.year ? `${entry.title} (${entry.year})` : entry.title;
+
+    const metaParts = [
+      entry.authors,
+      entry.publisher,
+      entry.langs ? `Målform: ${entry.langs}` : undefined,
+    ].filter(Boolean);
+
+    const meta = document.createElement('p');
+    meta.className = 'urn-meta';
+    meta.textContent = metaParts.join(' • ');
+
+    details.append(title);
+    if (metaParts.length) {
+      details.append(meta);
+    }
+
+    label.append(checkbox, details);
+    fragment.append(label);
   });
-  urnSelectField.replaceChildren(fragment);
-}
 
-function formatCorpusLabel(title: string, year?: number): string {
-  return year ? `${title} (${year})` : title;
-}
-
-function selectAllUrns() {
-  for (const option of Array.from(urnSelectField.options)) {
-    option.selected = true;
+  if (!fragment.hasChildNodes()) {
+    const empty = document.createElement('p');
+    empty.className = 'message info';
+    empty.textContent = term
+      ? `Ingen treff for «${filterValue.trim()}».`
+      : 'Ingen elementer i korpuset.';
+    urnListContainer.replaceChildren(empty);
+  } else {
+    urnListContainer.replaceChildren(fragment);
   }
 }
 
+function selectAllUrns() {
+  selectedUrns.clear();
+  CORPUS.forEach((entry) => selectedUrns.add(entry.urn));
+  renderUrnList(urnSearchField.value);
+  updateSelectedCount();
+}
+
+function clearAllUrns() {
+  selectedUrns.clear();
+  renderUrnList(urnSearchField.value);
+  updateSelectedCount();
+}
+
 function updateSelectedCount() {
-  const selected = getSelectedUrns().length;
+  const selected = selectedUrns.size;
+  const total = CORPUS.length;
   urnCountField.value =
     selected === 0
       ? '0 valgt'
-      : selected === urnSelectField.options.length
-        ? `Alle (${selected})`
+      : selected === total
+        ? `Alle (${total})`
         : `${selected} valgt`;
 }
 
 function getSelectedUrns(): string[] {
-  return Array.from(urnSelectField.selectedOptions).map((option) => option.value);
+  return Array.from(selectedUrns);
 }
 
 function renderMessage(
