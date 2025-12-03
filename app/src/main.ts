@@ -62,12 +62,12 @@ app.innerHTML = `
       <form id="conc-form" class="stack" autocomplete="off">
         <label>
           <span>Søkestreng (SQLite FTS5)</span>
-          <input name="query" type="text" placeholder="f.eks. «Gud NEAR/5 kjærlighet»" required />
+          <input name="query" type="text" placeholder="" required />
         </label>
         <div class="form-grid">
           <label>
             <span>Vindusstørrelse</span>
-            <input name="window" type="number" min="1" max="25" value="10" />
+            <input name="window" type="number" min="1" max="25" value="25" />
           </label>
           <label>
             <span>Maks linjer per dokument</span>
