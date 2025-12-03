@@ -69,12 +69,14 @@ p {
 label,
 input,
 select,
+textarea,
 button {
   font: inherit;
 }
 
 input,
-select {
+select,
+textarea {
   border-radius: 10px;
   border: 1px solid #cbd5f5;
   padding: 0.65rem 0.75rem;
@@ -83,7 +85,8 @@ select {
 }
 
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid #818cf8;
   border-color: #818cf8;
 }
@@ -265,6 +268,20 @@ label span {
   gap: 0.75rem;
 }
 
+.mode-switch {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.mode-switch label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .results {
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -337,6 +354,10 @@ tbody tr:hover {
   opacity: 0.4;
   border-color: #e2e8f0;
   color: #94a3b8;
+}
+
+.tab-panel[data-tab='frequencies'] th.sortable {
+  cursor: pointer;
 }
 
 @media (max-width: 720px) {

@@ -1,14 +1,14 @@
 ## Bibel-korpus PWA
 
-En enkel nettapplikasjon (Vite + TypeScript) som lar brukeren velge bibel-URN-er fra Nasjonalbibliotekets DH-lab, gjøre concordance- og kollokasjonsoppslag via API-et og laste ned resultatene som CSV-filer. Prosjektet er satt opp for GitHub Pages-deploy ved å bygge til `docs/`.
+En enkel nettapplikasjon (Vite + TypeScript) som lar brukeren velge bibel-URN-er fra Nasjonalbibliotekets DH-lab, gjøre konkordans- og kollokasjonsoppslag via API-et og laste ned resultatene som CSV-filer. Prosjektet er satt opp for GitHub Pages-deploy ved å bygge til `docs/`.
 
 ### Systemoversikt
 
 - `app/`: Vite-appen med all frontendkode
-  - `src/api.ts`: wrappere for `/conc` og `/urncolldist_urn`
-  - `src/data/corpus.ts`: auto-generert metadata fra `bibel-korpus.csv`
-  - `src/main.ts`: UI-logikk, formulærhåndtering, CSV-eksport
-  - `src/style.css`: hele designet (hero, paneler, tabeller)
+  - `src/api.ts`: wrappere for `/conc`, `/urncolldist_urn` og `/frequencies`
+  - `src/data/corpus.ts`: auto-generert metadata fra `bibel-korpus.csv` (tittel/forfatter/år/publisher/målform/dhlabid)
+  - `src/main.ts`: fanebasert UI (korpusvalg via checkbokser, konkordans- og kollokasjonsskjema, CSV-eksport)
+  - `src/style.css`: hele designet (hero, tabs, korpuskort, resultattabeller)
   - `vite.config.ts`: setter `base` og `outDir` slik at GitHub Pages fungerer
 - `docs/`: build-artefakter som Pages serverer (genereres av `npm run build`)
 - `bibel-korpus.csv`: originalliste over URN-verdier (grunnlag for `corpus.ts`)
@@ -39,8 +39,11 @@ Commit og push både `app/`-endringer og nye filer under `docs/`. GitHub Pages m
 - `POST https://api.nb.no/dhlab/urncolldist_urn`
   - JSON: `{ urn: string[] | null, word: string, before: number, after: number, samplesize: number }`
   - Respons inneholder `counts/dist/bdist`; konverteres til radliste i `fetchCollocations`
+- `POST https://api.nb.no/dhlab/frequencies`
+  - JSON: `{ urns: string[] | null, words: string[], cutoff: number }`
+  - Respons er rader `[urn, word, freq, urncount]`; appen beregner `relfreq` og kobler til korpus-metadata
 
-Alle kall skjer fra nettleseren, så det kreves ingen server-side komponenter.
+Alle kall skjer fra nettleseren, så det kreves ingen server-side komponenter. Begrensningene (`window`, `limit`) velges direkte i skjemaet – `limit` bestemmer maks antall konkordanser per dokument som hentes og vises.
 
 ### Videre arbeid
 
