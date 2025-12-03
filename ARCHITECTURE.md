@@ -31,16 +31,20 @@ repo-root
 ### Kontrollflyt
 
 1. **Init**
-   - `main.ts` injiserer HTML-mal i `#app`, leser `CORPUS` og fyller `<select>`
-   - Alle URN-er velges som default
-2. **Concordance**
-   - Bruker sender skjema → `fetchConcordance(DEFAULT_BASE_URL, params)`
-   - Resultatet normaliseres og vises i tabell (HTML i `conc` beholdes)
-   - Dataset lagres i minne (`concRows + concTableColumns`) for CSV-eksport
+   - `main.ts` bygger hele UI-et (hero + faner for `Korpus`, `Konkordanser`, `Kollokasjoner`)
+   - `CORPUS` lastes inn som en infokort-liste med checkbokser, søk på tittel/forfatter/år/publisher/målform og “velg alle/fjern alle”
+   - Valgte URN-er holdes i et `Set` og speiles i statusfeltet
+2. **Konkordanser**
+   - Brukeren sender skjema → `fetchConcordance(DEFAULT_BASE_URL, params)` (window default 25, limit justerbar)
+   - Resultatet normaliseres og vises i tabell med NB-lenker (HTML i `conc` beholdes)
+   - Dataset lagres i minne (`concRows + concTableColumns`) for CSV-eksport (alle rader som API-et returnerer)
 3. **Kollokasjoner**
-   - Samme mønster, men `fetchCollocations` konverterer counts/dist/bdist til radliste
-4. **CSV-eksport**
-   - Knappene henter siste dataset, fjerner HTML-tags, escaper CSV og trigger blob-nedlasting
+   - Samme mønster, men `fetchCollocations` konverterer counts/dist/bdist til radliste, og regner ut gjennomsnittlig distanse (`distance/count`) før sortering
+4. **Opptelling**
+   - Brukeren oppgir en kommaseparert ordliste → `fetchFrequencies(DEFAULT_BASE_URL, { urns, words, cutoff })`
+   - API-et returnerer rader med `[urn(dhlabid), word, freq, urncount]`; vi beregner `relfreq`, kobler til metainfo og viser/pivoterer i tabell
+5. **CSV-eksport**
+   - Knappene henter siste dataset per fane, fjerner HTML-tags, escaper CSV og trigger blob-nedlasting
 
 ### Dataflyt
 

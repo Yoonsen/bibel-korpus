@@ -4,6 +4,8 @@ import {
   DEFAULT_BASE_URL,
   fetchCollocations,
   fetchConcordance,
+  fetchFrequencies,
+  type FrequencyRow,
 } from './api';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -29,6 +31,7 @@ app.innerHTML = `
       <button class="tab-button" type="button" data-tab-target="corpus">Korpus</button>
       <button class="tab-button" type="button" data-tab-target="concordance">Konkordanser</button>
       <button class="tab-button" type="button" data-tab-target="collocations">Kollokasjoner</button>
+      <button class="tab-button" type="button" data-tab-target="frequencies">Opptelling</button>
     </div>
 
     <section class="panel tab-panel" data-tab="corpus" role="tabpanel">
@@ -115,6 +118,42 @@ app.innerHTML = `
       </div>
       <div id="coll-results" class="results"></div>
     </section>
+    <section class="panel tab-panel" data-tab="frequencies" role="tabpanel">
+      <header>
+        <div>
+          <p class="eyebrow">Opptelling</p>
+          <h2>Tell ord i utvalgte bibler</h2>
+        </div>
+      </header>
+      <form id="freq-form" class="stack" autocomplete="off">
+        <label>
+          <span>Ord/uttrykk (kommaseparert)</span>
+          <textarea name="words" rows="3" placeholder="helvete, evighet, etterliv" required></textarea>
+        </label>
+        <div class="form-grid">
+          <label>
+            <span>Cutoff (minimum antall)</span>
+            <input name="cutoff" type="number" min="0" value="0" />
+          </label>
+        </div>
+        <div class="mode-switch">
+          <label>
+            <input type="radio" name="freq-mode" value="freq" checked />
+            Absolutt
+          </label>
+          <label>
+            <input type="radio" name="freq-mode" value="relfreq" />
+            Relativ
+          </label>
+        </div>
+        <button type="submit">Tell ord</button>
+      </form>
+      <div class="result-actions">
+        <button type="button" id="download-freq" disabled>Last ned CSV</button>
+  </div>
+      <div id="freq-results" class="results tall"></div>
+    </section>
+
   </main>
 `;
 
@@ -123,10 +162,13 @@ const urnCount = app.querySelector<HTMLOutputElement>('#urn-count');
 const urnSearch = app.querySelector<HTMLInputElement>('#urn-search');
 const concResults = app.querySelector<HTMLDivElement>('#conc-results');
 const collResults = app.querySelector<HTMLDivElement>('#coll-results');
+const freqResults = app.querySelector<HTMLDivElement>('#freq-results');
 const concForm = app.querySelector<HTMLFormElement>('#conc-form');
 const collForm = app.querySelector<HTMLFormElement>('#coll-form');
+const freqForm = app.querySelector<HTMLFormElement>('#freq-form');
 const downloadConcButton = app.querySelector<HTMLButtonElement>('#download-conc');
 const downloadCollButton = app.querySelector<HTMLButtonElement>('#download-coll');
+const downloadFreqButton = app.querySelector<HTMLButtonElement>('#download-freq');
 const tabButtons = Array.from(
   app.querySelectorAll<HTMLButtonElement>('[data-tab-target]'),
 );
@@ -137,11 +179,14 @@ if (
   !urnCount ||
   !concResults ||
   !collResults ||
+  !freqResults ||
   !concForm ||
   !collForm ||
+  !freqForm ||
   !urnSearch ||
   !downloadConcButton ||
   !downloadCollButton ||
+  !downloadFreqButton ||
   tabButtons.length === 0 ||
   tabPanels.length === 0
 ) {
@@ -151,15 +196,52 @@ if (
 const urnCountField = urnCount;
 const concResultsBox = concResults;
 const collResultsBox = collResults;
+const freqResultsBox = freqResults;
 const concFormEl = concForm;
 const collFormEl = collForm;
+const freqFormEl = freqForm;
 const urnSearchField = urnSearch;
 const downloadConcBtn = downloadConcButton;
 const downloadCollBtn = downloadCollButton;
+const downloadFreqBtn = downloadFreqButton;
 const urnListContainer = urnList;
+type CorpusEntry = (typeof CORPUS)[number];
+type FrequencyMatrixRow = {
+  urn: string;
+  tittel: string;
+  år: number | string | '';
+  målform: string | '';
+  values: Record<string, { freq: number; relfreq: number }>;
+};
+
 const selectedUrns = new Set<string>(CORPUS.map((entry) => entry.urn));
 const tabs = tabButtons;
 const panels = tabPanels;
+const corpusById = new Map<string, CorpusEntry>();
+
+function normaliseId(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  const raw = String(value).trim();
+  return raw.replace(/\.0+$/, '');
+}
+
+function registerCorpusKey(value: string | number | null | undefined, normalise = true, entry: CorpusEntry) {
+  if (value === null || value === undefined) {
+    return;
+  }
+  const key = normalise ? normaliseId(value) : String(value).trim();
+  if (!key) {
+    return;
+  }
+  corpusById.set(key, entry);
+}
+
+CORPUS.forEach((entry) => {
+  registerCorpusKey(entry.urn, false, entry);
+  registerCorpusKey(entry.dhlabid, true, entry);
+});
 
 renderUrnList();
 updateSelectedCount();
@@ -169,6 +251,30 @@ let concTableColumns: string[] = [];
 let concRows: Array<Record<string, unknown>> = [];
 let collTableColumns: string[] = [];
 let collRows: Array<Record<string, unknown>> = [];
+let freqTableColumns: string[] = [];
+let freqRows: Array<Record<string, unknown>> = [];
+let freqMatrix: FrequencyMatrixRow[] = [];
+let freqWords: string[] = [];
+let freqDisplayMode: 'freq' | 'relfreq' = 'freq';
+let freqSortColumn: string | null = null;
+let freqSortDirection: 'asc' | 'desc' = 'asc';
+
+const freqModeInputs = Array.from(
+  freqFormEl.querySelectorAll<HTMLInputElement>('input[name="freq-mode"]'),
+);
+if (freqModeInputs.length) {
+  freqDisplayMode =
+    freqModeInputs.find((input) => input.checked)?.value === 'relfreq' ? 'relfreq' : 'freq';
+  freqModeInputs.forEach((input) => {
+    input.addEventListener('change', () => {
+      const mode = input.value === 'relfreq' ? 'relfreq' : 'freq';
+      if (mode !== freqDisplayMode) {
+        freqDisplayMode = mode;
+        renderFrequencyTable();
+      }
+    });
+  });
+}
 
 app
   .querySelector<HTMLButtonElement>('[data-action="select-all"]')
@@ -218,7 +324,7 @@ concFormEl.addEventListener('submit', async (event) => {
     const rows = await fetchConcordance(DEFAULT_BASE_URL, {
       urns: getSelectedUrns(),
       query,
-      window: parseInt(windowInput.value, 10) || 10,
+      window: parseInt(windowInput.value, 10) || 25,
       limit: parseInt(limitInput.value, 10) || 100,
     });
 
@@ -297,6 +403,59 @@ downloadConcBtn.addEventListener('click', () => {
 
 downloadCollBtn.addEventListener('click', () => {
   exportCsv(collRows, collTableColumns, 'kollokasjoner.csv');
+});
+
+freqFormEl.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const wordsInput = freqFormEl.querySelector<HTMLTextAreaElement>('textarea[name="words"]');
+  const cutoffInput = freqFormEl.querySelector<HTMLInputElement>('input[name="cutoff"]');
+
+  if (!wordsInput || !cutoffInput) {
+    return;
+  }
+
+  const words = wordsInput.value
+    .split(/[,\n]/)
+    .map((w) => w.trim())
+    .filter(Boolean);
+
+  if (!words.length) {
+    renderMessage(freqResultsBox, 'Skriv inn minst ett ord eller uttrykk.', 'error');
+    return;
+  }
+
+  const urns = getSelectedUrns();
+  if (!urns.length) {
+    renderMessage(freqResultsBox, 'Velg minst én bibel i korpus-fanen.', 'error');
+    return;
+  }
+
+  renderMessage(freqResultsBox, 'Henter opptelling …', 'info');
+  updateFreqDataset([], []);
+
+  try {
+    const rows = await fetchFrequencies(DEFAULT_BASE_URL, {
+      urns,
+      words,
+      cutoff: parseInt(cutoffInput.value, 10) || 0,
+    });
+
+    if (!rows.length) {
+      renderMessage(freqResultsBox, 'Ingen treff for disse ordene.', 'info');
+      updateFreqDataset([], []);
+      return;
+    }
+
+    buildFrequencyMatrix(rows);
+    renderFrequencyTable();
+  } catch (error) {
+    renderMessage(freqResultsBox, (error as Error).message, 'error');
+    updateFreqDataset([], []);
+  }
+});
+
+downloadFreqBtn.addEventListener('click', () => {
+  exportCsv(freqRows, freqTableColumns, 'opptelling.csv');
 });
 
 function renderUrnList(filterValue = '') {
@@ -432,6 +591,7 @@ function renderTable(
   columns.forEach((column) => {
     const th = document.createElement('th');
     th.textContent = column;
+    th.dataset.column = column;
     headerRow.appendChild(th);
   });
 
@@ -476,6 +636,130 @@ function updateCollDataset(rows: Array<Record<string, unknown>>, columns: string
   collRows = rows;
   collTableColumns = columns;
   downloadCollBtn.disabled = rows.length === 0;
+}
+
+function updateFreqDataset(rows: Array<Record<string, unknown>>, columns: string[]) {
+  freqRows = rows;
+  freqTableColumns = columns;
+  downloadFreqBtn.disabled = rows.length === 0;
+}
+
+function buildFrequencyMatrix(rows: FrequencyRow[]) {
+  const wordsSet = new Set<string>();
+  const grouped = new Map<string, FrequencyMatrixRow>();
+
+  rows.forEach((row) => {
+    wordsSet.add(row.word);
+    const normalized = normaliseId(row.urn);
+    const meta = corpusById.get(normalized);
+    const key = meta?.urn ?? normalized;
+    let bucket = grouped.get(key);
+    if (!bucket) {
+      bucket = {
+        urn: key,
+        tittel: meta?.title ?? key,
+        år: meta?.year ?? '',
+        målform: meta?.langs ?? '',
+        values: {},
+      };
+      grouped.set(key, bucket);
+    }
+    bucket.values[row.word] = { freq: row.freq, relfreq: row.relfreq };
+  });
+
+  freqWords = Array.from(wordsSet).sort((a, b) => a.localeCompare(b, 'nb'));
+  freqMatrix = Array.from(grouped.values()).sort((a, b) =>
+    String(a.tittel).localeCompare(String(b.tittel), 'nb'),
+  );
+}
+
+function renderFrequencyTable() {
+  if (!freqMatrix.length) {
+    renderMessage(freqResultsBox, 'Ingen data å vise.', 'info');
+    updateFreqDataset([], []);
+    return;
+  }
+
+  const metaColumns = ['år', 'målform', 'tittel', 'nb'];
+  const columns = freqWords.concat(metaColumns);
+  const tableRows = freqMatrix.map((entry) => {
+    const row: Record<string, unknown> = {};
+    freqWords.forEach((word) => {
+      const value = entry.values[word];
+      row[word] = value ? (freqDisplayMode === 'relfreq' ? value.relfreq : value.freq) : 0;
+    });
+    row.år = entry.år ?? '';
+    row.målform = entry.målform ?? '';
+    row.tittel = entry.tittel ?? '';
+    row.nb = entry.urn
+      ? `<a href="https://www.nb.no/items/${encodeURIComponent(entry.urn)}" target="_blank" rel="noopener noreferrer">NB</a>`
+      : '';
+    return row;
+  });
+
+  const sortedRows = sortFrequencyRows(tableRows);
+  const renderedColumns = renderTable(
+    freqResultsBox,
+    sortedRows,
+    columns,
+    new Set(['nb']),
+  );
+  updateFreqDataset(sortedRows, renderedColumns);
+  attachFrequencySortHandlers(columns);
+}
+
+function sortFrequencyRows(rows: Array<Record<string, unknown>>) {
+  if (!freqSortColumn) {
+    return rows;
+  }
+  const dir = freqSortDirection === 'asc' ? 1 : -1;
+  const isNumeric = freqWords.includes(freqSortColumn);
+  return [...rows].sort((a, b) => {
+    const aVal = a[freqSortColumn];
+    const bVal = b[freqSortColumn];
+    let result: number;
+    if (isNumeric) {
+      result = (Number(aVal) || 0) - (Number(bVal) || 0);
+    } else {
+      result = String(aVal ?? '').localeCompare(String(bVal ?? ''), 'nb', { numeric: true });
+    }
+    return result * dir;
+  });
+}
+
+function attachFrequencySortHandlers(columns: string[]) {
+  const table = freqResultsBox.querySelector('table');
+  if (!table) {
+    return;
+  }
+  const headers = table.querySelectorAll<HTMLTableCellElement>('th');
+  headers.forEach((th) => {
+    const column = th.dataset.column;
+    th.classList.remove('sortable');
+    th.removeAttribute('aria-sort');
+    th.onclick = null;
+    if (!column || column === 'nb') {
+      return;
+    }
+    th.classList.add('sortable');
+    if (column === freqSortColumn) {
+      th.setAttribute('aria-sort', freqSortDirection === 'asc' ? 'ascending' : 'descending');
+    }
+    th.onclick = () => handleFrequencyHeaderClick(column);
+  });
+}
+
+function handleFrequencyHeaderClick(column: string) {
+  if (column === 'nb') {
+    return;
+  }
+  if (freqSortColumn === column) {
+    freqSortDirection = freqSortDirection === 'asc' ? 'desc' : 'asc';
+  } else {
+    freqSortColumn = column;
+    freqSortDirection = 'asc';
+  }
+  renderFrequencyTable();
 }
 
 function exportCsv(

@@ -6,6 +6,7 @@ export type CorpusEntry = {
   authors?: string;
   publisher?: string;
   langs?: string;
+  dhlabid?: string;
 };
 
 export const CORPUS: CorpusEntry[] = [
@@ -14,7 +15,8 @@ export const CORPUS: CorpusEntry[] = [
     "title": "NTR - Det nye testamente revidert . [ 1 ] : Lukasevangeliet , Første tessalonikerbrev , Andre tessalonikerbrev , Galaterbrevet , Filipperbrevet",
     "year": 2003,
     "publisher": "Det norske bibelselskap",
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100010961.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2008052304066",
@@ -22,21 +24,24 @@ export const CORPUS: CorpusEntry[] = [
     "year": 1959,
     "authors": "Osnes , Torbjørn",
     "publisher": "Det Norske bibelselskaps forl.",
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100040613.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2011060308011",
     "title": "Det nye testamentet",
     "year": 2005,
     "publisher": "Det norske bibelselskap",
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100048618.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2012033008102",
     "title": "Evangeliet etter Lukas",
     "year": 1973,
     "publisher": "Det norske bibelselskap",
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100084964.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2012081508153",
@@ -44,28 +49,32 @@ export const CORPUS: CorpusEntry[] = [
     "year": 1951,
     "authors": "Skard , Vemund / Osnes , Torbjørn",
     "publisher": "Det norske bibelselskaps forlag",
-    "langs": "nob / grc"
+    "langs": "nob / grc",
+    "dhlabid": "100100888.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2013030506026",
     "title": "Bibelen : det Gamle og det Nye testamente : [ bokmål ]",
     "year": 1978,
     "publisher": "Det Norske bibelselskaps forlag",
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100138726.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2013020808015",
     "title": "NTR - Det nye testamente revidert . [ 2 ] : Markusevangeliet , Romerbrevet , Første korinterbrev , Andre korinterbrev",
     "year": 2003,
     "publisher": "Det norske bibelselskap",
-    "langs": "mul / nob / nno"
+    "langs": "mul / nob / nno",
+    "dhlabid": "100139398.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2013061206082",
     "title": "NTR - Det nye testamente revidert . [ 3 ] : Matteusevangeliet , Efeserbrevet , Kolosserbrevet",
     "year": 2004,
     "publisher": "Det norske bibelselskap",
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100152845.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2015110407068",
@@ -73,7 +82,8 @@ export const CORPUS: CorpusEntry[] = [
     "year": 1976,
     "authors": "Vallotton , Annie",
     "publisher": "Bibelselskapet",
-    "langs": "nno"
+    "langs": "nno",
+    "dhlabid": "100274283.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2016061748023",
@@ -81,7 +91,8 @@ export const CORPUS: CorpusEntry[] = [
     "year": 1975,
     "authors": "Vallotton , Annie",
     "publisher": "Det norske bibelselskaps forl.",
-    "langs": "nob / gre"
+    "langs": "nob / gre",
+    "dhlabid": "100297911.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2018020748002",
@@ -89,56 +100,64 @@ export const CORPUS: CorpusEntry[] = [
     "year": 2011,
     "authors": "Bøe , Sverre / Holmås , Geir Otto",
     "publisher": "Tapir akademisk forl.",
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100364017.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2018030805008",
     "title": "Utvalg av det Gamle testamente : oversettelse av 1966",
     "year": 1966,
     "publisher": "Det Norske bibelselskaps forl.",
-    "langs": "nob / heb"
+    "langs": "nob / heb",
+    "dhlabid": "100365478.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2017091807031",
     "title": "Bibelen , eller Den Hellige skrift : det gamle og det Nye testamentes kanoniske bøker",
     "year": 1930,
     "publisher": "Det Norske bibelselskap",
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100482251.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2019061928001",
     "title": "Biblia : Det er den gantske Hellige Scrifft , vdsæt paa Danske",
     "year": 1550,
     "publisher": "aff Ludowich Dietz",
-    "langs": "dan"
+    "langs": "dan",
+    "dhlabid": "100484406.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2021012648506",
     "title": "Bibelen , eller Den hellige Skrift indeholdende det Gamle og Nye Testamentes kanoniske Bøger",
     "year": 1905,
     "publisher": "Det norske Bibelselskabs Forl.",
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100485380.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2016031029001",
     "title": "Biblia , Paa Danske : Det er , Den gandske hellige Skriftis Bøgger , Paa ny igiennemseete , med flid , efter den Ebræiske oc Grækiske Text , det næste mueligt var , Oc forbedrede med ny Summarier , fuldkommeligere Concordantzer , oc korte antegnelser udi Bredden , anlangendis de mørcke Ord oc maader ad tale med. 3 : Den Tredie Part Af det Gamle Testamentis Bøgger",
     "year": 1647,
     "publisher": "[ved Melchior Martzan oc Melchior Winckler]",
-    "langs": "dan"
+    "langs": "dan",
+    "dhlabid": "100492545.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2016040729001",
     "title": "Biblia , Paa Danske : Det er , Den gandske hellige Skriftis Bøgger , Paa ny igiennemseete , med flid , efter den Ebræiske oc Grækiske Text , det næste mueligt var , Oc forbedrede med ny Summarier , fuldkommeligere Concordantzer , oc korte antegnelser udi Bredden , anlangendis de mørcke Ord oc maader ad tale med. 1 : Den første Part Af det Gamle Testamentis Bøgger",
     "year": 1647,
     "publisher": "[ved Melchior Martzan oc Melchior Winckler]",
-    "langs": "dan"
+    "langs": "dan",
+    "dhlabid": "100492584.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2016040729002",
     "title": "Biblia , Paa Danske : Det er , Den gandske hellige Skriftis Bøgger , Paa ny igiennemseete , med flid , efter den Ebræiske oc Grækiske Text , det næste mueligt var , Oc forbedrede med ny Summarier , fuldkommeligere Concordantzer , oc korte antegnelser udi Bredden , anlangendis de mørcke Ord oc maader ad tale med. 2 : Den Anden Part Af det gamle Testamentis Bøgger",
     "year": 1647,
     "publisher": "[ved Melchior Martzan oc Melchior Winckler]",
-    "langs": "dan"
+    "langs": "dan",
+    "dhlabid": "100492585.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2010110206027",
@@ -146,34 +165,39 @@ export const CORPUS: CorpusEntry[] = [
     "year": 1915,
     "authors": "Seippel , Alexander",
     "publisher": "Det norske bibel-sellskape",
-    "langs": "nno / grc"
+    "langs": "nno / grc",
+    "dhlabid": "100520866.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2011052608017",
     "title": "Det nye testamentet",
     "year": 2005,
     "publisher": "Det norske bibelselskap",
-    "langs": "nno"
+    "langs": "nno",
+    "dhlabid": "100540180.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2011053008068",
     "title": "NTR - Det nye testamente revidert . [ 5 ] : Apostlenes gjerninger , Første timoteusbrev , Andre timoteusbrev , Brevet til Titus , Brevet til Filemon , Hebreerbrevet , Jakobs brev , Første petersbrev , Andre petersbrev , Judas ' brev",
     "year": 2005,
     "publisher": "Det norske bibelselskap",
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100552275.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2022030107531",
     "title": "Bibelen : Den hellige skrift : Det gamle og Det nye testamente",
     "year": 1985,
     "publisher": "Det norske bibelselskap",
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100582412.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2021041548624",
     "title": "Bibelen , eller den Hellige Skrift : indeholdende Det gamle og nye Testaments kanoniske Bøger , tilligemed Det gamle Testamentes apokryfiske Bøger",
     "year": 1908,
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100588397.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2022011028001",
@@ -181,7 +205,8 @@ export const CORPUS: CorpusEntry[] = [
     "year": 1589,
     "authors": "Dietrich , Veit / Luther , Martin",
     "publisher": "Aff Matz Vingaardt",
-    "langs": "dan"
+    "langs": "dan",
+    "dhlabid": "100596484.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2022011928001",
@@ -189,14 +214,16 @@ export const CORPUS: CorpusEntry[] = [
     "year": 1633,
     "authors": "Luther , Martin / Dietrich , Veit / Martzan , Melchior / Sartor , Salomon",
     "publisher": "Prentet ved Melchior Martzan",
-    "langs": "dan"
+    "langs": "dan",
+    "dhlabid": "100606092.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2022030107535",
     "title": "Bibelen : det Gamle og det Nye testamentet : [ nynorsk ]",
     "year": 1978,
     "publisher": "Det Norske bibelselskap",
-    "langs": "nno"
+    "langs": "nno",
+    "dhlabid": "100609051.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2022012528002",
@@ -204,21 +231,24 @@ export const CORPUS: CorpusEntry[] = [
     "year": 1607,
     "authors": "Resen , Hans Poulsen",
     "publisher": "[utgiver ikke identifisert]",
-    "langs": "dan"
+    "langs": "dan",
+    "dhlabid": "100612630.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2008040104074",
     "title": "Det Nye Testamente",
     "year": 1904,
     "publisher": "Det Norske Bibelselskabs Forl.",
-    "langs": "nob / grc"
+    "langs": "nob / grc",
+    "dhlabid": "100615340.0"
   },
   {
     "urn": "URN:NBN:no-nb_digibok_2017051148061",
     "title": "Bibelens eller Den hellige Skrifts kanoniske Bøger",
     "year": 1891,
     "publisher": "Bibelselskabet",
-    "langs": "nob"
+    "langs": "nob",
+    "dhlabid": "100634178.0"
   }
 ];
 

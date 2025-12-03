@@ -31,6 +31,20 @@ export type CollocationRow = {
   avgDistance: number | null;
 };
 
+export type FrequencyParams = {
+  urns: string[];
+  words: string[];
+  cutoff: number;
+};
+
+export type FrequencyRow = {
+  urn: string;
+  word: string;
+  freq: number;
+  urncount: number;
+  relfreq: number;
+};
+
 type ColumnarPayload = Record<string, unknown>;
 
 type CollocationPayload = {
@@ -73,6 +87,32 @@ export async function fetchCollocations(
     const bScore = b.avgDistance ?? Number.POSITIVE_INFINITY;
     return aScore - bScore || b.count - a.count;
   });
+}
+
+export async function fetchFrequencies(
+  baseUrl: string,
+  params: FrequencyParams,
+): Promise<FrequencyRow[]> {
+  const body = {
+    urns: params.urns.length ? params.urns : null,
+    cutoff: Math.max(0, params.cutoff),
+    words: params.words,
+  };
+
+  const payload = await postJSON<unknown>(baseUrl, '/frequencies', body);
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return (payload as Array<[string, string, number, number]>).map(
+    ([urn, word, freq, urncount]) => ({
+      urn,
+      word,
+      freq,
+      urncount,
+      relfreq: urncount ? freq / urncount : 0,
+    }),
+  );
 }
 
 async function postJSON<T>(
