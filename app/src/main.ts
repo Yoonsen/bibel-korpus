@@ -40,9 +40,19 @@ app.innerHTML = `
           <p class="eyebrow">Subkorpus</p>
           <h2>Velg bibelutgaver</h2>
         </div>
-        <output id="urn-count">0 valgt</output>
+        <output id="urn-count">A: 0 • B: 0</output>
       </header>
       <div class="subkorpus-controls">
+        <div class="mode-switch">
+          <label>
+            <input type="radio" name="active-subcorpus" value="A" checked />
+            Rediger subkorpus A
+          </label>
+          <label>
+            <input type="radio" name="active-subcorpus" value="B" />
+            Rediger subkorpus B
+          </label>
+        </div>
         <div class="actions">
           <button type="button" data-action="select-all">Velg alle</button>
           <button type="button" data-action="clear-all">Fjern alle</button>
@@ -146,6 +156,20 @@ app.innerHTML = `
             Relativ
           </label>
         </div>
+        <div class="mode-switch">
+          <label>
+            <input type="radio" name="count-method" value="dhlab" checked />
+            dhlab-counts (enkeltord)
+          </label>
+          <label>
+            <input type="radio" name="count-method" value="phrase" />
+            Frasetelling (eksakt forekomst)
+          </label>
+        </div>
+        <label>
+          <input type="checkbox" name="compare-subcorpora" />
+          Sammenlign subkorpus A mot B
+        </label>
         <button type="submit">Tell ord</button>
       </form>
       <div class="result-actions">
@@ -206,6 +230,8 @@ const downloadCollBtn = downloadCollButton;
 const downloadFreqBtn = downloadFreqButton;
 const urnListContainer = urnList;
 type CorpusEntry = (typeof CORPUS)[number];
+type SubcorpusName = 'A' | 'B';
+type CountMethod = 'dhlab' | 'phrase';
 type FrequencyMatrixRow = {
   urn: string;
   tittel: string;
@@ -214,7 +240,11 @@ type FrequencyMatrixRow = {
   values: Record<string, { freq: number; relfreq: number }>;
 };
 
-const selectedUrns = new Set<string>(CORPUS.map((entry) => entry.urn));
+const selectedUrnsBySubcorpus: Record<SubcorpusName, Set<string>> = {
+  A: new Set<string>(CORPUS.map((entry) => entry.urn)),
+  B: new Set<string>(),
+};
+let activeSubcorpus: SubcorpusName = 'A';
 const tabs = tabButtons;
 const panels = tabPanels;
 const corpusById = new Map<string, CorpusEntry>();
@@ -256,6 +286,7 @@ let freqRows: Array<Record<string, unknown>> = [];
 let freqMatrix: FrequencyMatrixRow[] = [];
 let freqWords: string[] = [];
 let freqDisplayMode: 'freq' | 'relfreq' = 'freq';
+let freqCountMethod: CountMethod = 'dhlab';
 let freqSortColumn: string | null = null;
 let freqSortDirection: 'asc' | 'desc' = 'asc';
 
@@ -275,6 +306,21 @@ if (freqModeInputs.length) {
     });
   });
 }
+
+const activeSubcorpusInputs = Array.from(
+  app.querySelectorAll<HTMLInputElement>('input[name="active-subcorpus"]'),
+);
+activeSubcorpusInputs.forEach((input) => {
+  input.addEventListener('change', () => {
+    const nextSubcorpus = input.value === 'B' ? 'B' : 'A';
+    if (!input.checked || nextSubcorpus === activeSubcorpus) {
+      return;
+    }
+    activeSubcorpus = nextSubcorpus;
+    renderUrnList(urnSearchField.value);
+    updateSelectedCount();
+  });
+});
 
 app
   .querySelector<HTMLButtonElement>('[data-action="select-all"]')
@@ -409,8 +455,14 @@ freqFormEl.addEventListener('submit', async (event) => {
   event.preventDefault();
   const wordsInput = freqFormEl.querySelector<HTMLTextAreaElement>('textarea[name="words"]');
   const cutoffInput = freqFormEl.querySelector<HTMLInputElement>('input[name="cutoff"]');
+  const countMethodInput = freqFormEl.querySelector<HTMLInputElement>(
+    'input[name="count-method"]:checked',
+  );
+  const compareInput = freqFormEl.querySelector<HTMLInputElement>(
+    'input[name="compare-subcorpora"]',
+  );
 
-  if (!wordsInput || !cutoffInput) {
+  if (!wordsInput || !cutoffInput || !countMethodInput || !compareInput) {
     return;
   }
 
@@ -424,21 +476,65 @@ freqFormEl.addEventListener('submit', async (event) => {
     return;
   }
 
+  const countMethod: CountMethod = countMethodInput.value === 'phrase' ? 'phrase' : 'dhlab';
+  freqCountMethod = countMethod;
+  const cutoff = parseInt(cutoffInput.value, 10) || 0;
   const urns = getSelectedUrns();
-  if (!urns.length) {
+  if (!urns.length && !compareInput.checked) {
     renderMessage(freqResultsBox, 'Velg minst én bibel i korpus-fanen.', 'error');
     return;
   }
 
-  renderMessage(freqResultsBox, 'Henter opptelling …', 'info');
+  if (compareInput.checked) {
+    const urnsA = getSelectedUrns('A');
+    const urnsB = getSelectedUrns('B');
+    if (!urnsA.length || !urnsB.length) {
+      renderMessage(
+        freqResultsBox,
+        'For sammenligning må både subkorpus A og B ha minst én valgt bibel.',
+        'error',
+      );
+      return;
+    }
+  }
+
+  if (countMethod === 'phrase' && freqDisplayMode === 'relfreq') {
+    freqDisplayMode = 'freq';
+    const absoluteModeInput = freqFormEl.querySelector<HTMLInputElement>(
+      'input[name="freq-mode"][value="freq"]',
+    );
+    if (absoluteModeInput) {
+      absoluteModeInput.checked = true;
+    }
+  }
+
+  renderMessage(
+    freqResultsBox,
+    countMethod === 'phrase'
+      ? 'Henter frasetelling (eksakt forekomst) …'
+      : 'Henter opptelling (dhlab-counts) …',
+    'info',
+  );
   updateFreqDataset([], []);
 
   try {
-    const rows = await fetchFrequencies(DEFAULT_BASE_URL, {
-      urns,
-      words,
-      cutoff: parseInt(cutoffInput.value, 10) || 0,
-    });
+    if (compareInput.checked) {
+      const [rowsA, rowsB] = await Promise.all([
+        fetchCountRows(countMethod, getSelectedUrns('A'), words, cutoff),
+        fetchCountRows(countMethod, getSelectedUrns('B'), words, cutoff),
+      ]);
+
+      if (!rowsA.length && !rowsB.length) {
+        renderMessage(freqResultsBox, 'Ingen treff for disse ordene.', 'info');
+        updateFreqDataset([], []);
+        return;
+      }
+
+      renderFrequencyComparisonTable(rowsA, rowsB, words, countMethod);
+      return;
+    }
+
+    const rows = await fetchCountRows(countMethod, urns, words, cutoff);
 
     if (!rows.length) {
       renderMessage(freqResultsBox, 'Ingen treff for disse ordene.', 'info');
@@ -489,12 +585,12 @@ function renderUrnList(filterValue = '') {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.value = entry.urn;
-    checkbox.checked = selectedUrns.has(entry.urn);
+    checkbox.checked = selectedUrnsBySubcorpus[activeSubcorpus].has(entry.urn);
     checkbox.addEventListener('change', () => {
       if (checkbox.checked) {
-        selectedUrns.add(entry.urn);
+        selectedUrnsBySubcorpus[activeSubcorpus].add(entry.urn);
       } else {
-        selectedUrns.delete(entry.urn);
+        selectedUrnsBySubcorpus[activeSubcorpus].delete(entry.urn);
       }
       updateSelectedCount();
     });
@@ -538,31 +634,28 @@ function renderUrnList(filterValue = '') {
 }
 
 function selectAllUrns() {
-  selectedUrns.clear();
-  CORPUS.forEach((entry) => selectedUrns.add(entry.urn));
+  selectedUrnsBySubcorpus[activeSubcorpus].clear();
+  CORPUS.forEach((entry) => selectedUrnsBySubcorpus[activeSubcorpus].add(entry.urn));
   renderUrnList(urnSearchField.value);
   updateSelectedCount();
 }
 
 function clearAllUrns() {
-  selectedUrns.clear();
+  selectedUrnsBySubcorpus[activeSubcorpus].clear();
   renderUrnList(urnSearchField.value);
   updateSelectedCount();
 }
 
 function updateSelectedCount() {
-  const selected = selectedUrns.size;
+  const selectedA = selectedUrnsBySubcorpus.A.size;
+  const selectedB = selectedUrnsBySubcorpus.B.size;
   const total = CORPUS.length;
-  urnCountField.value =
-    selected === 0
-      ? '0 valgt'
-      : selected === total
-        ? `Alle (${total})`
-        : `${selected} valgt`;
+  const activeSelected = selectedUrnsBySubcorpus[activeSubcorpus].size;
+  urnCountField.value = `A: ${selectedA}/${total} • B: ${selectedB}/${total} • aktiv: ${activeSubcorpus} (${activeSelected})`;
 }
 
-function getSelectedUrns(): string[] {
-  return Array.from(selectedUrns);
+function getSelectedUrns(subcorpus: SubcorpusName = activeSubcorpus): string[] {
+  return Array.from(selectedUrnsBySubcorpus[subcorpus]);
 }
 
 function renderMessage(
@@ -673,6 +766,172 @@ function buildFrequencyMatrix(rows: FrequencyRow[]) {
   );
 }
 
+async function fetchCountRows(
+  method: CountMethod,
+  urns: string[],
+  words: string[],
+  cutoff: number,
+): Promise<FrequencyRow[]> {
+  if (method === 'phrase') {
+    return fetchPhraseFrequencies(urns, words, cutoff);
+  }
+  return fetchFrequencies(DEFAULT_BASE_URL, { urns, words, cutoff });
+}
+
+async function fetchPhraseFrequencies(
+  urns: string[],
+  words: string[],
+  cutoff: number,
+): Promise<FrequencyRow[]> {
+  const countsByUrn = new Map<string, Map<string, number>>();
+  urns.forEach((urn) => {
+    countsByUrn.set(urn, new Map(words.map((word) => [word, 0])));
+  });
+
+  const resultsByWord = await Promise.all(
+    words.map(async (word) => {
+      const rows = await fetchConcordance(DEFAULT_BASE_URL, {
+        urns,
+        query: buildPhraseQuery(word),
+        window: 25,
+        limit: 1000,
+      });
+      return { word, rows };
+    }),
+  );
+
+  resultsByWord.forEach(({ word, rows }) => {
+    rows.forEach((row) => {
+      const urn = row.urn ? String(row.urn) : '';
+      const bucket = countsByUrn.get(urn);
+      if (!bucket) {
+        return;
+      }
+      const concordanceText = typeof row.conc === 'string' ? row.conc : '';
+      const occurrences = countExactOccurrences(concordanceText, word);
+      bucket.set(word, (bucket.get(word) ?? 0) + occurrences);
+    });
+  });
+
+  const frequencyRows: FrequencyRow[] = [];
+  urns.forEach((urn) => {
+    const bucket = countsByUrn.get(urn);
+    if (!bucket) {
+      return;
+    }
+    words.forEach((word) => {
+      const freq = bucket.get(word) ?? 0;
+      if (freq < cutoff) {
+        return;
+      }
+      frequencyRows.push({
+        urn,
+        word,
+        freq,
+        urncount: 0,
+        relfreq: 0,
+      });
+    });
+  });
+  return frequencyRows;
+}
+
+function buildPhraseQuery(input: string): string {
+  const term = input.trim();
+  if (!term.includes(' ')) {
+    return term;
+  }
+  return `"${term.replace(/"/g, '""')}"`;
+}
+
+function countExactOccurrences(haystack: string, needle: string): number {
+  if (!needle) {
+    return 0;
+  }
+  let count = 0;
+  let fromIndex = 0;
+  while (true) {
+    const index = haystack.indexOf(needle, fromIndex);
+    if (index === -1) {
+      break;
+    }
+    count += 1;
+    fromIndex = index + needle.length;
+  }
+  return count;
+}
+
+function summarizeGroupFrequencies(rows: FrequencyRow[]) {
+  const totalsByWord = new Map<string, number>();
+  const urnWordCounts = new Map<string, number>();
+
+  rows.forEach((row) => {
+    totalsByWord.set(row.word, (totalsByWord.get(row.word) ?? 0) + row.freq);
+    if (!urnWordCounts.has(row.urn)) {
+      urnWordCounts.set(row.urn, row.urncount);
+    }
+  });
+
+  const totalWords = Array.from(urnWordCounts.values()).reduce((sum, value) => sum + value, 0);
+  return { totalsByWord, totalWords };
+}
+
+function renderFrequencyComparisonTable(
+  rowsA: FrequencyRow[],
+  rowsB: FrequencyRow[],
+  requestedWords: string[],
+  countMethod: CountMethod,
+) {
+  const summaryA = summarizeGroupFrequencies(rowsA);
+  const summaryB = summarizeGroupFrequencies(rowsB);
+  const orderedWords = Array.from(
+    new Set([
+      ...requestedWords,
+      ...summaryA.totalsByWord.keys(),
+      ...summaryB.totalsByWord.keys(),
+    ]),
+  ).sort((a, b) => a.localeCompare(b, 'nb'));
+
+  const comparisonRows = orderedWords.map((word) => {
+    const freqA = summaryA.totalsByWord.get(word) ?? 0;
+    const freqB = summaryB.totalsByWord.get(word) ?? 0;
+    const relA = summaryA.totalWords ? (freqA / summaryA.totalWords) * 100 : 0;
+    const relB = summaryB.totalWords ? (freqB / summaryB.totalWords) * 100 : 0;
+    if (countMethod === 'phrase') {
+      return {
+        ord: word,
+        A_frekvens: freqA,
+        B_frekvens: freqB,
+        differanse: freqA - freqB,
+      };
+    }
+    return {
+      ord: word,
+      A_frekvens: freqA,
+      B_frekvens: freqB,
+      differanse: freqA - freqB,
+      A_rel_prosent: relA,
+      B_rel_prosent: relB,
+      differanse_rel_prosentpoeng: relA - relB,
+    };
+  });
+
+  const columns =
+    countMethod === 'phrase'
+      ? ['ord', 'A_frekvens', 'B_frekvens', 'differanse']
+      : [
+          'ord',
+          'A_frekvens',
+          'B_frekvens',
+          'differanse',
+          'A_rel_prosent',
+          'B_rel_prosent',
+          'differanse_rel_prosentpoeng',
+        ];
+  const renderedColumns = renderTable(freqResultsBox, comparisonRows, columns);
+  updateFreqDataset(comparisonRows, renderedColumns);
+}
+
 function renderFrequencyTable() {
   if (!freqMatrix.length) {
     renderMessage(freqResultsBox, 'Ingen data å vise.', 'info');
@@ -682,6 +941,8 @@ function renderFrequencyTable() {
 
   const metaColumns = ['år', 'målform', 'tittel', 'nb'];
   const columns = freqWords.concat(metaColumns);
+  const canUseRelative = freqCountMethod === 'dhlab';
+  const useRelative = canUseRelative && freqDisplayMode === 'relfreq';
   const tableRows = freqMatrix.map((entry) => {
     const row: Record<string, unknown> = {};
     freqWords.forEach((word) => {
@@ -690,10 +951,7 @@ function renderFrequencyTable() {
         row[word] = 0;
         return;
       }
-      row[word] =
-        freqDisplayMode === 'relfreq'
-          ? value.relfreq * 100
-          : value.freq;
+      row[word] = useRelative ? value.relfreq * 100 : value.freq;
     });
     row.år = entry.år ?? '';
     row.målform = entry.målform ?? '';

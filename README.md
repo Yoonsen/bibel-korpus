@@ -5,14 +5,17 @@ En enkel nettapplikasjon (Vite + TypeScript) som lar brukeren velge bibel-URN-er
 ### Systemoversikt
 
 - `app/`: Vite-appen med all frontendkode
-  - `src/api.ts`: wrappere for `/conc`, `/urncolldist_urn` og `/frequencies`
+  - `src/lib/dhlab-client.ts`: gjenbrukbar DH-lab-klient (konkordanser, kollokasjoner, opptelling, dokumenttall)
+  - `src/api.ts`: re-eksporterer klienten for denne appen
   - `src/data/corpus.ts`: auto-generert metadata fra `bibel-korpus.csv` (tittel/forfatter/år/publisher/målform/dhlabid)
   - `src/main.ts`: fanebasert UI (korpusvalg via checkbokser, konkordans- og kollokasjonsskjema, CSV-eksport)
   - `src/style.css`: hele designet (hero, tabs, korpuskort, resultattabeller)
   - `vite.config.ts`: setter `base` og `outDir` slik at GitHub Pages fungerer
-- `docs/`: build-artefakter som Pages serverer (genereres av `npm run build`)
+- `docs/`: mappe for publisering på GitHub Pages (inneholder både build-artefakter og prosjektdokumentasjon)
 - `bibel-korpus.csv`: originalliste over URN-verdier (grunnlag for `corpus.ts`)
 - `MANIFEST.md`, `ARCHITECTURE.md`, `LOGBOOK.md`: prosjektbeskrivelser og historikk
+- `DHLAB_CLIENT.md`: dokumentasjon av API-klientbiblioteket
+- `API_VALG.md`: notat om API-strategi og når ulike API-modi brukes
 
 ### Kom i gang
 

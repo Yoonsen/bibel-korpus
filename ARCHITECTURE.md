@@ -22,7 +22,8 @@ repo-root
 
 | Modul | Ansvar |
 | --- | --- |
-| `src/api.ts` | Wrapper for DH-lab API: `fetchConcordance` og `fetchCollocations`. Normaliserer JSON fra API (kolonne- eller strengbasert) til rader og håndterer grensesnitt-feil. |
+| `src/lib/dhlab-client.ts` | Gjenbrukbar klient for DH-lab (`fetchConcordance`, `fetchCollocations`, `fetchFrequencies`, helper-kall). |
+| `src/api.ts` | Tynn modul som re-eksporterer `dhlab-client` for dagens app. |
 | `src/data/corpus.ts` | Typedefinisjon + `CORPUS`-array. Generert fra `bibel-korpus.csv`, sikrer at UI alltid har oppdatert URN-liste. |
 | `src/main.ts` | Oppretter hele DOM-strukturen, binder eventer for subkorpus, skjemaer og nedlasting, samt gir lager for sist innhentede datasett. |
 | `src/style.css` | All styling (hero, paneler, tabeller, meldinger, knapper). Ingen tredjepartsrammeverk. |
