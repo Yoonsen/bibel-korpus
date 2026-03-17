@@ -166,6 +166,20 @@ app.innerHTML = `
             Frasetelling (eksakt forekomst)
           </label>
         </div>
+        <div class="mode-switch">
+          <label>
+            <input type="radio" name="chart-mode" value="auto" checked />
+            Graf: auto
+          </label>
+          <label>
+            <input type="radio" name="chart-mode" value="line" />
+            Linje
+          </label>
+          <label>
+            <input type="radio" name="chart-mode" value="bar" />
+            Stolpe
+          </label>
+        </div>
         <label>
           <input type="checkbox" name="compare-subcorpora" />
           Sammenlign subkorpus A mot B
@@ -232,6 +246,7 @@ const urnListContainer = urnList;
 type CorpusEntry = (typeof CORPUS)[number];
 type SubcorpusName = 'A' | 'B';
 type CountMethod = 'dhlab' | 'phrase';
+type ChartMode = 'auto' | 'line' | 'bar';
 type FrequencyMatrixRow = {
   urn: string;
   tittel: string;
@@ -285,10 +300,20 @@ let freqTableColumns: string[] = [];
 let freqRows: Array<Record<string, unknown>> = [];
 let freqMatrix: FrequencyMatrixRow[] = [];
 let freqWords: string[] = [];
+let freqSourceRows: FrequencyRow[] = [];
 let freqDisplayMode: 'freq' | 'relfreq' = 'freq';
 let freqCountMethod: CountMethod = 'dhlab';
+let freqChartMode: ChartMode = 'auto';
 let freqSortColumn: string | null = null;
 let freqSortDirection: 'asc' | 'desc' = 'asc';
+let freqLastComparison:
+  | {
+      rowsA: FrequencyRow[];
+      rowsB: FrequencyRow[];
+      words: string[];
+      countMethod: CountMethod;
+    }
+  | null = null;
 
 const freqModeInputs = Array.from(
   freqFormEl.querySelectorAll<HTMLInputElement>('input[name="freq-mode"]'),
@@ -301,7 +326,27 @@ if (freqModeInputs.length) {
       const mode = input.value === 'relfreq' ? 'relfreq' : 'freq';
       if (mode !== freqDisplayMode) {
         freqDisplayMode = mode;
-        renderFrequencyTable();
+        renderCurrentFrequencyView();
+      }
+    });
+  });
+}
+
+const chartModeInputs = Array.from(
+  freqFormEl.querySelectorAll<HTMLInputElement>('input[name="chart-mode"]'),
+);
+if (chartModeInputs.length) {
+  freqChartMode = (chartModeInputs.find((input) => input.checked)?.value as ChartMode) ?? 'auto';
+  chartModeInputs.forEach((input) => {
+    input.addEventListener('change', () => {
+      if (!input.checked) {
+        return;
+      }
+      const mode: ChartMode =
+        input.value === 'line' ? 'line' : input.value === 'bar' ? 'bar' : 'auto';
+      if (mode !== freqChartMode) {
+        freqChartMode = mode;
+        renderCurrentFrequencyView();
       }
     });
   });
@@ -527,10 +572,14 @@ freqFormEl.addEventListener('submit', async (event) => {
       if (!rowsA.length && !rowsB.length) {
         renderMessage(freqResultsBox, 'Ingen treff for disse ordene.', 'info');
         updateFreqDataset([], []);
+        freqSourceRows = [];
+        freqLastComparison = null;
         return;
       }
 
-      renderFrequencyComparisonTable(rowsA, rowsB, words, countMethod);
+      freqSourceRows = [];
+      freqLastComparison = { rowsA, rowsB, words, countMethod };
+      renderCurrentFrequencyView();
       return;
     }
 
@@ -539,14 +588,20 @@ freqFormEl.addEventListener('submit', async (event) => {
     if (!rows.length) {
       renderMessage(freqResultsBox, 'Ingen treff for disse ordene.', 'info');
       updateFreqDataset([], []);
+      freqSourceRows = [];
+      freqLastComparison = null;
       return;
     }
 
+    freqSourceRows = rows;
+    freqLastComparison = null;
     buildFrequencyMatrix(rows);
-    renderFrequencyTable();
+    renderCurrentFrequencyView();
   } catch (error) {
     renderMessage(freqResultsBox, (error as Error).message, 'error');
     updateFreqDataset([], []);
+    freqSourceRows = [];
+    freqLastComparison = null;
   }
 });
 
@@ -676,7 +731,17 @@ function renderTable(
     preferredColumns?.length && preferredColumns?.some((col) => col in rows[0])
       ? preferredColumns
       : Object.keys(rows[0]);
+  const table = createTableElement(rows, columns, htmlColumns);
+  container.innerHTML = '';
+  container.appendChild(table);
+  return columns;
+}
 
+function createTableElement(
+  rows: Array<Record<string, unknown>>,
+  columns: string[],
+  htmlColumns: Set<string> = new Set(),
+): HTMLTableElement {
   const table = document.createElement('table');
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
@@ -714,9 +779,7 @@ function renderTable(
   });
 
   table.appendChild(tbody);
-  container.innerHTML = '';
-  container.appendChild(table);
-  return columns;
+  return table;
 }
 
 function updateConcDataset(rows: Array<Record<string, unknown>>, columns: string[]) {
@@ -861,6 +924,11 @@ function countExactOccurrences(haystack: string, needle: string): number {
   return count;
 }
 
+function resolveCorpusEntryForFrequencyRow(row: FrequencyRow): CorpusEntry | undefined {
+  const normalizedId = normaliseId(row.urn);
+  return corpusById.get(normalizedId);
+}
+
 function summarizeGroupFrequencies(rows: FrequencyRow[]) {
   const totalsByWord = new Map<string, number>();
   const urnWordCounts = new Map<string, number>();
@@ -930,6 +998,7 @@ function renderFrequencyComparisonTable(
         ];
   const renderedColumns = renderTable(freqResultsBox, comparisonRows, columns);
   updateFreqDataset(comparisonRows, renderedColumns);
+  appendFrequencyOverTimeComparisonTable(rowsA, rowsB, orderedWords, countMethod);
 }
 
 function renderFrequencyTable() {
@@ -971,6 +1040,302 @@ function renderFrequencyTable() {
   );
   updateFreqDataset(sortedRows, renderedColumns);
   attachFrequencySortHandlers();
+  appendFrequencyOverTimeTable();
+}
+
+function appendFrequencyOverTimeTable() {
+  if (!freqSourceRows.length) {
+    return;
+  }
+  const canUseRelative = freqCountMethod === 'dhlab';
+  const useRelative = canUseRelative && freqDisplayMode === 'relfreq';
+  const yearBuckets = new Map<number, Record<string, unknown>>();
+  const yearWordTotals = new Map<number, Record<string, number>>();
+  const yearWordBase = new Map<number, number>();
+  const seenUrnByYear = new Set<string>();
+
+  freqSourceRows.forEach((row) => {
+    const meta = resolveCorpusEntryForFrequencyRow(row);
+    const year = meta?.year;
+    if (!year) {
+      return;
+    }
+    const current = yearWordTotals.get(year) ?? {};
+    current[row.word] = (current[row.word] ?? 0) + row.freq;
+    yearWordTotals.set(year, current);
+
+    if (freqCountMethod === 'dhlab') {
+      const urnKey = `${year}:${normaliseId(row.urn)}`;
+      if (!seenUrnByYear.has(urnKey)) {
+        seenUrnByYear.add(urnKey);
+        yearWordBase.set(year, (yearWordBase.get(year) ?? 0) + row.urncount);
+      }
+    }
+  });
+
+  const years = Array.from(yearWordTotals.keys()).sort((a, b) => a - b);
+  years.forEach((year) => {
+    const counts = yearWordTotals.get(year) ?? {};
+    const row: Record<string, unknown> = { år: year };
+    let total = 0;
+    freqWords.forEach((word) => {
+      const absolute = counts[word] ?? 0;
+      const base = yearWordBase.get(year) ?? 0;
+      const value = useRelative ? (base ? (absolute / base) * 100 : 0) : absolute;
+      row[word] = value;
+      total += value;
+    });
+    row.total = total;
+    yearBuckets.set(year, row);
+  });
+
+  const timelineRows = years
+    .map((year) => yearBuckets.get(year))
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+
+  if (!timelineRows.length) {
+    return;
+  }
+
+  const heading = document.createElement('p');
+  heading.className = 'eyebrow';
+  heading.textContent = useRelative
+    ? 'Opptelling over tid (relativ, gruppert på år)'
+    : 'Opptelling over tid (absolutt, gruppert på år)';
+  const table = createTableElement(timelineRows, ['år', ...freqWords, 'total']);
+  freqResultsBox.append(heading, table);
+
+  const seriesKeys =
+    freqWords.length <= 5 ? [...freqWords, 'total'] : ['total', ...freqWords.slice(0, 4)];
+  const chart = createTimelineChart(
+    timelineRows,
+    'år',
+    seriesKeys.map((key) => ({ key, label: key })),
+    freqChartMode,
+  );
+  freqResultsBox.append(chart);
+}
+
+function appendFrequencyOverTimeComparisonTable(
+  rowsA: FrequencyRow[],
+  rowsB: FrequencyRow[],
+  words: string[],
+  countMethod: CountMethod,
+) {
+  const canUseRelative = countMethod === 'dhlab' && freqDisplayMode === 'relfreq';
+  const byYearA = summarizeRowsByYear(rowsA, words);
+  const byYearB = summarizeRowsByYear(rowsB, words);
+  const years = Array.from(new Set([...byYearA.keys(), ...byYearB.keys()])).sort((a, b) => a - b);
+  if (!years.length) {
+    return;
+  }
+
+  const timelineRows = years.map((year) => {
+    const bucketA = byYearA.get(year) ?? { counts: {}, base: 0 };
+    const bucketB = byYearB.get(year) ?? { counts: {}, base: 0 };
+    const row: Record<string, unknown> = { år: year };
+    let totalA = 0;
+    let totalB = 0;
+    words.forEach((word) => {
+      const rawA = bucketA.counts[word] ?? 0;
+      const rawB = bucketB.counts[word] ?? 0;
+      const valueA = canUseRelative ? (bucketA.base ? (rawA / bucketA.base) * 100 : 0) : rawA;
+      const valueB = canUseRelative ? (bucketB.base ? (rawB / bucketB.base) * 100 : 0) : rawB;
+      row[`${word}_A`] = valueA;
+      row[`${word}_B`] = valueB;
+      row[`${word}_diff`] = valueA - valueB;
+      totalA += valueA;
+      totalB += valueB;
+    });
+    row.A_total = totalA;
+    row.B_total = totalB;
+    row.diff_total = totalA - totalB;
+    return row;
+  });
+
+  const columns = [
+    'år',
+    ...words.flatMap((word) => [`${word}_A`, `${word}_B`, `${word}_diff`]),
+    'A_total',
+    'B_total',
+    'diff_total',
+  ];
+  const heading = document.createElement('p');
+  heading.className = 'eyebrow';
+  heading.textContent = canUseRelative
+    ? 'Sammenligning over tid (relativ, gruppert på år)'
+    : 'Sammenligning over tid (absolutt, gruppert på år)';
+  const table = createTableElement(timelineRows, columns);
+  freqResultsBox.append(heading, table);
+  const chart = createTimelineChart(
+    timelineRows,
+    'år',
+    [
+      { key: 'A_total', label: 'A total' },
+      { key: 'B_total', label: 'B total' },
+      { key: 'diff_total', label: 'Differanse total' },
+    ],
+    freqChartMode,
+  );
+  freqResultsBox.append(chart);
+}
+
+function summarizeRowsByYear(rows: FrequencyRow[], words: string[]) {
+  const byYear = new Map<number, { counts: Record<string, number>; base: number }>();
+  const seenUrnByYear = new Set<string>();
+  rows.forEach((row) => {
+    const meta = resolveCorpusEntryForFrequencyRow(row);
+    const year = meta?.year;
+    if (!year) {
+      return;
+    }
+    const bucket = byYear.get(year) ?? {
+      counts: Object.fromEntries(words.map((word) => [word, 0])),
+      base: 0,
+    };
+    bucket.counts[row.word] = (bucket.counts[row.word] ?? 0) + row.freq;
+
+    const urnKey = `${year}:${normaliseId(row.urn)}`;
+    if (!seenUrnByYear.has(urnKey)) {
+      seenUrnByYear.add(urnKey);
+      bucket.base += row.urncount;
+    }
+    byYear.set(year, bucket);
+  });
+  return byYear;
+}
+
+function createTimelineChart(
+  rows: Array<Record<string, unknown>>,
+  yearKey: string,
+  series: Array<{ key: string; label: string }>,
+  chartMode: ChartMode,
+): HTMLElement {
+  const wrapper = document.createElement('section');
+  wrapper.className = 'timeline-chart';
+
+  const resolvedMode = resolveChartMode(rows.length, chartMode);
+  const title = document.createElement('p');
+  title.className = 'eyebrow';
+  title.textContent =
+    resolvedMode === 'bar' ? 'Graf over tid (stolper)' : 'Graf over tid (linjer)';
+  wrapper.appendChild(title);
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 920 300');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'Frekvens over tid');
+
+  const years = rows.map((row) => Number(row[yearKey])).filter((value) => Number.isFinite(value));
+  const seriesValues = series.map((entry) =>
+    rows.map((row) => Number(row[entry.key]) || 0),
+  );
+  const maxValue = Math.max(1, ...seriesValues.flat().map((value) => Math.abs(value)));
+
+  const left = 50;
+  const right = 20;
+  const top = 20;
+  const bottom = 40;
+  const width = 920 - left - right;
+  const height = 300 - top - bottom;
+  const zeroY = top + height;
+  const palette = ['#1d4ed8', '#047857', '#b45309', '#7c3aed', '#dc2626', '#0f766e'];
+
+  const axis = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  axis.setAttribute('d', `M ${left} ${top} V ${zeroY} H ${left + width}`);
+  axis.setAttribute('stroke', '#94a3b8');
+  axis.setAttribute('fill', 'none');
+  svg.appendChild(axis);
+
+  const useBars = resolvedMode === 'bar';
+  if (useBars) {
+    const groupWidth = width / Math.max(1, rows.length);
+    const barWidth = (groupWidth / Math.max(1, series.length + 1)) * 0.8;
+    rows.forEach((row, rowIndex) => {
+      const baseX = left + rowIndex * groupWidth + groupWidth * 0.15;
+      series.forEach((entry, seriesIndex) => {
+        const value = Number(row[entry.key]) || 0;
+        const barHeight = (Math.abs(value) / maxValue) * height;
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', String(baseX + seriesIndex * (barWidth + 4)));
+        rect.setAttribute('y', String(zeroY - barHeight));
+        rect.setAttribute('width', String(barWidth));
+        rect.setAttribute('height', String(barHeight));
+        rect.setAttribute('fill', palette[seriesIndex % palette.length]);
+        svg.appendChild(rect);
+      });
+    });
+  } else {
+    series.forEach((entry, seriesIndex) => {
+      const points = rows.map((row, idx) => {
+        const x = left + (width * idx) / Math.max(1, rows.length - 1);
+        const value = Number(row[entry.key]) || 0;
+        const y = zeroY - (Math.abs(value) / maxValue) * height;
+        return { x, y };
+      });
+      const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      polyline.setAttribute(
+        'points',
+        points.map((point) => `${point.x},${point.y}`).join(' '),
+      );
+      polyline.setAttribute('fill', 'none');
+      polyline.setAttribute('stroke', palette[seriesIndex % palette.length]);
+      polyline.setAttribute('stroke-width', '2');
+      svg.appendChild(polyline);
+    });
+  }
+
+  years.forEach((year, idx) => {
+    const x = left + (width * idx) / Math.max(1, years.length - 1);
+    const tick = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    tick.setAttribute('x', String(x));
+    tick.setAttribute('y', String(zeroY + 16));
+    tick.setAttribute('text-anchor', 'middle');
+    tick.setAttribute('font-size', '10');
+    tick.setAttribute('fill', '#475569');
+    tick.textContent = String(year);
+    svg.appendChild(tick);
+  });
+
+  wrapper.appendChild(svg);
+
+  const legend = document.createElement('div');
+  legend.className = 'timeline-legend';
+  series.forEach((entry, idx) => {
+    const item = document.createElement('span');
+    item.className = 'timeline-legend-item';
+    const swatch = document.createElement('i');
+    swatch.style.background = palette[idx % palette.length];
+    item.append(swatch, document.createTextNode(entry.label));
+    legend.appendChild(item);
+  });
+  wrapper.appendChild(legend);
+  return wrapper;
+}
+
+function resolveChartMode(rowCount: number, mode: ChartMode): 'line' | 'bar' {
+  if (mode === 'bar') {
+    return 'bar';
+  }
+  if (mode === 'line') {
+    return rowCount < 2 ? 'bar' : 'line';
+  }
+  return rowCount <= 3 ? 'bar' : 'line';
+}
+
+function renderCurrentFrequencyView() {
+  if (freqLastComparison) {
+    renderFrequencyComparisonTable(
+      freqLastComparison.rowsA,
+      freqLastComparison.rowsB,
+      freqLastComparison.words,
+      freqLastComparison.countMethod,
+    );
+    return;
+  }
+  if (freqMatrix.length) {
+    renderFrequencyTable();
+  }
 }
 
 function sortFrequencyRows(rows: Array<Record<string, unknown>>) {
